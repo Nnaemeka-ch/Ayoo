@@ -85,6 +85,14 @@ def main():
 
         print(f"Player 1 points: {player_seed_count['player1']} | Player 2 points: {player_seed_count['player2']}")
 
+        """
+        In Ayoo, rounds keep going until one player captures all the other player’s pots. 
+        Next, #ToDo will be to loop the main game logic after each round and reset the pots to 4. 
+        And update the logic so that whenever a player ends a round with more than 6 pots, the pot allocation is adjusted—
+        awarding them the pots they captured plus their default 6, and subtracting the same amount from the other player. 
+        After that, check the player counts and continue the game as long as not all pots are captured.
+        """
+
            
     if player_seed_count['player1'] > player_seed_count['player2']:
         print("Player 1 wins 🏆")
