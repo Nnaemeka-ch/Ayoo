@@ -1,110 +1,202 @@
+import tkinter as tk
+import math
+
+
+# Define some constants for the canvas size
+CANVAS_WIDTH = 800
+CANVAS_HEIGHT = 500
+
+# Define the size of the game rectangle relative to the canvas
+GAME_RECT_LENGTH = (3/4) * CANVAS_WIDTH # 75% of canvas width
+GAME_RECT_HEIGHT = (1/4) * CANVAS_WIDTH # 25% of canvas width (proportional to width)
+
+POTS = [{"owner": "player1", "pot_number": i, "seeds": 4} for i in range(1, 7)
+        ] + [{"owner": "player2", "pot_number": i, "seeds": 4} for i in range(7, 13)] # Generate 12 pots, initializing each pot with 4 seeds
+
+# Global list to hold pot position data for click detection
+POT_POSITIONS = []  # Each item: (pot_number, cx, cy, radius)
+
+PLAYER = 1
+
+# Dictionary to keep track of the number of seeds captured by each player
+PLAYER_SEED_COUNT = {"player1": 0, "player2": 0}
+
+seeds_to_distribute = 0
+
+# Sum all seeds from each pot on the board
+total_seed_on_board = sum(pot["seeds"] for pot in POTS)
+ 
+
 def main():
-    print("Game of Ayoo!")
-    """
-    Ayoo, also known as Oware, or Mancala in various regions is a traditional African board game 
-    played with a wooden board containing pits (called houses) and small seeds or stones (called seeds or beans). 
-    It is especially popular in West Africa.
+    root = tk.Tk()
+    root.title("Ayoo Board")
+    canvas = tk.Canvas(root, width=CANVAS_WIDTH, height=CANVAS_HEIGHT)
+    canvas.pack()
 
-    The goal is typically to capture more seeds than your opponent, and players take turns distributing seeds 
-    around the board in a process called sowing. The gameplay generally emphasizes strategy, planning ahead, and sometimes a bit of bluffing.
-    """
+    # Create a label below the canvas to show scores
+    score_label = tk.Label(root, text="", font=("Arial", 14), bg="#996D26", fg="white")
+    score_label.pack(pady=10)
 
-    # Initialize the game board with 12 pots (6 per player), each starting with 4 seeds.
-    pots = [
-        {"owner": "player1", "name": f"pot{i+1}", "seeds": 4} for i in range(6)
-    ] + [
-        {"owner": "player2", "name": f"pot{i+1}", "seeds": 4} for i in range(6)
-    ]
+    # Create a label to show current turn
+    turn_label = tk.Label(root, text="", font=("Arial", 12), fg="white", bg="#996D26")
+    turn_label.pack(pady=5)
+
+    canvas.create_rectangle(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, fill="#996D26")
+
+    # Draw the game area and get inner rectangle coordinates
+    x3, x4, y3, y4 = game_area_sqr(canvas)
+
+    # Draw the game pots using the game_area_sqr coordinates
+    draw_game_pot_at(canvas, x3, x4, y3, y4)
+
+    # Update the initial label text
+    update_labels(score_label, turn_label)
+
+    # Start the main game loop
+    main_game(canvas, score_label, turn_label)
+
+    root.mainloop()
 
 
-    # Initialize the first player
-    player = 1
 
-    # Creating a variable to track the number of seeds to distribute for a player round
-    pick_seeds_to_distribute = 0  
+def game_area_sqr(canvas):
+    # Calculate coordinates for the outer rectangle (game area)
+    x1 = CANVAS_WIDTH / 8
+    y1 = CANVAS_HEIGHT / 4
+    x2 = x1 + GAME_RECT_LENGTH 
+    y2 = y1 + GAME_RECT_HEIGHT
 
-    # Dictionary to keep track of the number of seeds captured by each player
-    player_seed_count = {"player1": 0, "player2": 0}
+    # Calculate coordinates for the inner rectangle (game board border)
+    x3 = x1 + 5
+    y3 = y1 + 5
+    x4 = x2 - 5
+    y4 = y2 - 5 
 
-    # Sum all seeds from each pot on the board
-    total_seed_on_board = sum(pot["seeds"] for pot in pots)
+    canvas.create_rectangle(x1, y1, x2, y2, fill="#7E5514", outline="")
+    canvas.create_rectangle(x3, y3, x4, y4, fill="#F7D49C", outline="")
 
+    return x3, x4, y3, y4
 
-    while total_seed_on_board > 0:
-        # Display board  
-        display_board(pots)
-        pot_names = [pot["name"] for pot in pots if pot["owner"] == f"player{player}"]
-        
+   
 
-        while True:
-            pot_selection = input(f"\nPlayer {player}, choose a pot to sow seeds from (pot1 to pot6): ").lower()
+def draw_game_pot_at(canvas, x3, x4, y3, y4):
+    W = x4 - x3  # Inner rectangle width
+    num_circles = 6
+    gap = W / 20  # gap between circles
+    diameter = (W - (num_circles + 1) * gap) / num_circles # from W = 6*d + 7*g
+    radius = diameter / 2
+    
 
-            if pot_selection in pot_names:
-                # Find the index of the selected pot
-                pot_index = next(i for i, pot in enumerate(pots) if pot["owner"] == f"player{player}" and pot["name"] == pot_selection)
+    # Calculate the vertical centers for rows
+    y_center = (y3 + y4) / 2
+    y_top_row_center = (y3 + y_center) / 2
+    y_bottom_row_center = (y_center + y4) / 2
 
-                if pots[pot_index]["seeds"] == 0:
-                    print(f"{pot_selection} is empty. Please choose a pot with seeds.")
-                    continue
-                else:
-                    break
+    def draw_pot_and_seeds(cx, cy, pot_number):
+        # Draw the pot
+        canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill="#996D26", outline="")
 
-            else:
-                print("Invalid pot name. Try again.")
-                pot_selection = ""
-                continue
+        # Find the pot data from POTS
+        pot_data = next((p for p in POTS if p["pot_number"] == pot_number), None)
+        if pot_data:
+            num_seeds = pot_data["seeds"]
+
+            # Distribute seeds evenly in a circle within the pot
+            seed_radius = radius / 5
+            for i in range(num_seeds):
+                angle = (2 * math.pi / num_seeds) * i
+                seed_cx = cx + (radius / 2) * math.cos(angle)
+                seed_cy = cy + (radius / 2) * math.sin(angle)
+                canvas.create_oval(seed_cx - seed_radius, seed_cy - seed_radius,
+                                   seed_cx + seed_radius, seed_cy + seed_radius,
+                                   fill="#F7D49C", outline="black")
                 
-        # Proceed to sow/distribute seeds from selected pot
-        pick_seeds_to_distribute = pots[pot_index]["seeds"] #pick up seeds
-        pots[pot_index]["seeds"] = 0    # selected pot is now empty
-        pot_index = (pot_index + 1) % len(pots)  # Move to next pot
+        # Save pot position for click detection
+        POT_POSITIONS.append((pot_number, cx, cy, radius))
+            
+    # Draw top row of pots
+    for i in range(num_circles):
+        cx = x3 + gap + radius + i * (diameter + gap)
+        draw_pot_and_seeds(cx, y_top_row_center, i + 1)
 
-        print(f"\nSowing the seeds of {pot_selection}...")
-
-        # Main game logic: distribute seeds and handle any captures before switching players
-        distribute_seeds_across_pots(pots, pot_index, pick_seeds_to_distribute, player, player_seed_count)
-
-        # Go through the current player's pots, find any with exactly 4 seeds, and capture them.
-        clear_fours_in_players_pots(pots, player, pot_index, player_seed_count)
-
-        # Update the sum all seeds from each pot on the board
-        total_seed_on_board = sum(pot["seeds"] for pot in pots)
-
-        if total_seed_on_board >= 8:
-            # Switch to next player
-            player = 2 if player == 1 else 1 
-
-            # Now the new player sweeps their own pots
-            clear_fours_in_players_pots(pots, player, pot_index, player_seed_count)
-
-        else: #if there are only four seeds
-            player_seed_count[f"player{player}"] += 4
-            total_seed_on_board = 0
+    # Draw bottom row of pots (pots 12 to 7 in reverse)
+    for i in range(num_circles):
+        cx = x3 + gap + radius + i * (diameter + gap)
+        pot_number = 12 - i
+        draw_pot_and_seeds(cx, y_bottom_row_center, pot_number)
 
 
 
-        print(f"Player 1 points: {player_seed_count['player1']} | Player 2 points: {player_seed_count['player2']}")
+def main_game(canvas, score_label, turn_label):
+    # Bind a custom handler to the click event
+    canvas.bind("<Button-1>", lambda event: handle_player_click(event, canvas, score_label, turn_label))
 
-        """
-        In Ayoo, rounds keep going until one player captures all the other player’s pots. 
-        Next, #ToDo will be to loop the main game logic after each round and reset the pots to 4. 
-        And update the logic so that whenever a player ends a round with more than 6 pots, the pot allocation is adjusted—
-        awarding them the pots they captured plus their default 6, and subtracting the same amount from the other player. 
-        After that, check the player counts and continue the game as long as not all pots are captured.
-        """
 
-           
-    if player_seed_count['player1'] > player_seed_count['player2']:
-        print("Player 1 wins 🏆")
-    elif player_seed_count['player2'] > player_seed_count['player1']:
-        print("Player 2 wins 🏆")
+def handle_player_click(event, canvas, score_label, turn_label):
+    global total_seed_on_board, PLAYER
+
+    pot_num_selected = on_click(event)
+    if pot_num_selected is None:
+        return
+
+    selected_pot = POTS[pot_num_selected - 1]
+
+    # Restriction: only let the current player play their pots
+    if selected_pot["owner"] != f"player{PLAYER}":
+        print(f"Invalid move! It's Player {PLAYER}'s turn. Please select your own pot.")
+        return
+
+    # Check if the pot has seeds
+    seeds_to_distribute = selected_pot["seeds"]
+    if seeds_to_distribute == 0:
+        print("This pot is empty. Please select a pot with seeds.")
+        return
+
+    # Proceed with normal seed distribution
+    POTS[pot_num_selected - 1]["seeds"] = 0
+
+    next_pot = (pot_num_selected + 1) % len(POTS)
+    distribute_seeds_across_pots(POTS, next_pot, seeds_to_distribute, PLAYER, PLAYER_SEED_COUNT)
+
+    # Clear any 4s for this player
+    clear_fours_in_players_pots(POTS, PLAYER, next_pot, PLAYER_SEED_COUNT)
+
+    # Update the total seeds on board
+    total_seed_on_board = sum(pot["seeds"] for pot in POTS)
+
+    # Check if we need to switch players
+    if total_seed_on_board >= 8:
+        PLAYER = 2 if PLAYER == 1 else 1
+        clear_fours_in_players_pots(POTS, PLAYER, next_pot, PLAYER_SEED_COUNT)
     else:
-        print("It's a tie")
+        # Only 4 seeds left, give them to the current player and end
+        PLAYER_SEED_COUNT[f"player{PLAYER}"] += 4
+        total_seed_on_board = 0
+        print("Game Over!")
+        declare_winner(score_label, turn_label)
+        return
+
+    # Update the labels
+    update_labels(score_label, turn_label)
+
+    # Redraw the board
+    refresh_canvas(canvas)
+
+
+def on_click(event):
+    x_click, y_click = event.x, event.y
+    for pot_number, cx, cy, radius in POT_POSITIONS:
+        dist = math.sqrt((x_click - cx) ** 2 + (y_click - cy) ** 2)
+        if dist <= radius:
+            print(f"Clicked pot {pot_number} at ({cx}, {cy})!")
+            return pot_number
+    # If we get here, no pot was clicked
+    print("You haven't selected a Pot. Please select a Pot")
+
     
-        
-       
-    
-def distribute_seeds_across_pots(pots, start_index, seeds_to_distribute, player, player_seed_count):
+
+
+def distribute_seeds_across_pots(pots, pot_selected, seeds_to_distribute, player, player_seed_count):
     """
     Distributes seeds one by one into pots starting from start_index.
     If the final seed lands in a pot with 0 or 3 seeds, perform capture and exit early.
@@ -112,49 +204,32 @@ def distribute_seeds_across_pots(pots, start_index, seeds_to_distribute, player,
     Returns the final pot index after distribution.
     """
     while seeds_to_distribute > 0:
-        # start_index = (start_index + 1) % len(pots)  # move to next pot
 
         # If only 1 seed remains and pot is empty or has 3 seeds, place it in pot and handle capture 
-        if seeds_to_distribute == 1 and pots[start_index]["seeds"] in (0, 3):
-            pots[start_index]["seeds"] += 1
+        if seeds_to_distribute == 1 and pots[pot_selected - 1]["seeds"] in (0, 3):
+            pots[pot_selected - 1]["seeds"] += 1
             seeds_to_distribute -= 1
-            handle_capture(pots, player, start_index, player_seed_count)
+            handle_capture(pots, player, pot_selected - 1, player_seed_count)
             break
 
         elif seeds_to_distribute == 1:
             # Drop the last seed, pick up all seeds in this pot, and continue
-            pots[start_index]["seeds"] += 1
-            seeds_to_distribute = pots[start_index]["seeds"]
-            pots[start_index]["seeds"] = 0
-            start_index = (start_index + 1) % len(pots)
+            pots[pot_selected - 1]["seeds"] += 1
+            seeds_to_distribute = pots[pot_selected - 1]["seeds"]
+            pots[pot_selected - 1]["seeds"] = 0
+            pot_selected = (pot_selected + 1) % len(pots)
 
         else:
             # Otherwise, normal distribution: drop a seed and move on
-            pots[start_index]["seeds"] += 1
+            pots[pot_selected - 1]["seeds"] += 1
             seeds_to_distribute -= 1
 
-            if pots[start_index]["seeds"] == 4:
-                handle_capture(pots, player, start_index, player_seed_count)
+            if pots[pot_selected - 1]["seeds"] == 4:
+                handle_capture(pots, player, pot_selected - 1, player_seed_count)
 
-            start_index = (start_index + 1) % len(pots)
+            pot_selected = (pot_selected + 1) % len(pots)
         
-    return start_index
-      
-
-   
-def display_board(pots):
-    """
-    Prints the current state of the board, showing how many seeds are in each player's pots.
-    """
-    print("\nPlayer 1 pots:")
-    for pot in pots:
-        if pot["owner"] == "player1":
-            print(f'{pot["name"]}: {pot["seeds"]}')
-
-    print("Player 2 pots:")
-    for pot in pots:
-        if pot["owner"] == "player2":
-            print(f'{pot["name"]}: {pot["seeds"]}')
+    return pot_selected
 
 
 
@@ -169,19 +244,54 @@ def handle_capture(pots, player, pot_index, player_seed_count):
     if pot_index >= 0 and pots[pot_index]["seeds"] == 4:
         player_seed_count[f"player{player}"] += 4
         pots[pot_index]["seeds"] = 0
+            
 
+def refresh_canvas(canvas):
+    # Clear the canvas
+    canvas.delete("all")
+    
+    # Redraw the background
+    canvas.create_rectangle(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT, fill="#996D26")
+    
+    # Redraw game area
+    x3, x4, y3, y4 = game_area_sqr(canvas)
+    
+    # Redraw pots and seeds
+    draw_game_pot_at(canvas, x3, x4, y3, y4)
 
 
 def clear_fours_in_players_pots(pots, player, pot_index, player_seed_count):
     """
-    Checks all of the player’s other pots and captures any that have exactly 4 seeds.
+    Checks all of the players other pots and captures any that have exactly 4 seeds.
     """
     for i, pot in enumerate(pots):
         if i != pot_index and pot["owner"] == f"player{player}" and pot["seeds"] == 4:
             pot["seeds"] = 0
             player_seed_count[f"player{player}"] += 4
 
-    
+
+def update_labels(score_label, turn_label):
+    score_label.config(text=f"Player 1 points: {PLAYER_SEED_COUNT['player1']} | Player 2 points: {PLAYER_SEED_COUNT['player2']}")
+    turn_label.config(text=f"Player {PLAYER}'s Turn!")
+
+
+def declare_winner(score_label, turn_label):
+    p1 = PLAYER_SEED_COUNT['player1']
+    p2 = PLAYER_SEED_COUNT['player2']
+    if p1 > p2:
+        winner = "Player 1"
+    elif p2 > p1:
+        winner = "Player 2"
+    else:
+        winner = "It's a Tie!"
+    turn_label.config(text=f"Game Over! {winner} wins!")
+    score_label.config(text=f"Final Score - Player 1: {p1} | Player 2: {p2}")
+
+
+            
+            
+
+
 
 if __name__ == "__main__":
     main()
